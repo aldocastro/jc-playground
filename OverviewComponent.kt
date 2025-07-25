@@ -1,5 +1,7 @@
 package com.example.overview
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -58,6 +60,37 @@ import coil.compose.rememberImagePainter
 import coil.request.ImageResult
 import coil.compose.rememberAsyncImagePainter
 import coil.compose.AsyncImagePainter
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Typeface
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import android.graphics.Rect
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.graphicsLayer
+import coil.SingletonImageLoader
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.request.CachePolicy
+import coil.request.Disposable
+import coil.request.ErrorResult
+import coil.request.SuccessResult
+import coil.size.Size
+import coil.size.px2dp
+import androidx.compose.ui.geometry.Size as ComposeSize
 
 enum class CardState {
     ACTIVE, DISABLED
@@ -80,80 +113,144 @@ class OverviewViewModel: ViewModel() {
 
 }
 
+/**
+ * Custom Painter for drawing a colored rectangle.
+ * Used as a placeholder or error painter for AsyncImage.
+ */
+private class ColoredRectanglePainter(private val color: Color) : Painter() {
+    override val intrinsicSize: ComposeSize = ComposeSize.Unspecified
+
+    override fun DrawScope.onDraw() {
+        drawRect(color = color)
+    }
+}
+
+// Function to get a singleton ImageLoader for Coil, can be customized if needed
 @Composable
-fun OverviewComponent(viewModel: OverviewViewModel) {
-    Column(
-        modifier = Modifier
-        .padding(top = 24.dp)
-        .fillMaxSize()
-        .verticalScroll(rememberScrollState())
-    ) {
-        Title(viewModel)
-        Spacer(modifier = Modifier.height(16.dp))
-        // Info(viewModel)
-        // Spacer(modifier = Modifier.weight(1f))
-        // Footer(viewModel)
+private fun getAsyncImagePainter(context: android.content.Context): ImageLoader {
+    return remember(context) {
+        ImageLoader.Builder(context)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+}
+
+
+@Composable
+fun OverviewComponent(viewModel: OverviewViewModel = viewModel()) {
+    val configuration = LocalConfiguration.current
+    val screenHeightDp = configuration.screenHeightDp.dp
+    val screenWidthDp = configuration.screenWidthDp.dp
+
+    // Define a breakpoint for height to decide if we can place components side-by-side
+    // This is a heuristic value; adjust based on your design needs.
+    val minHeightForSideBySide = 480.dp // Example: if screen height is less than 480dp, don't go side-by-side
+
+    val canGoSideBySide = screenHeightDp >= minHeightForSideBySide && configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    if (canGoSideBySide) {
+        // Landscape with enough vertical space: Two-pane layout
+        Row(
+            modifier = Modifier
+                .padding(top = 24.dp)
+                .fillMaxSize(), // No primary scroll here, individual components will scroll if needed
+            verticalAlignment = Alignment.CenterVertically // Center content vertically
+        ) {
+            // Card Gallery (takes available width)
+            GalleryAndTitle(viewModel = viewModel, modifier = Modifier.weight(0.6f)) // Card gallery takes 60% of width
+            Spacer(modifier = Modifier.width(32.dp)) // Add space between components
+            // Card Details (takes remaining width)
+            val selectedCard by viewModel.selectedCardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
+            selectedCard?.let {
+                CardDetails(card = it, modifier = Modifier.weight(0.4f)) // Card details takes 40% of width
+            }
+        }
+    } else {
+        // Portrait, or Landscape with limited vertical space: Single-column layout
+        Column(
+            modifier = Modifier
+                .padding(top = 24.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()) // Ensure content is scrollable vertically
+        ) {
+            Title(viewModel) // This will contain the HorizontalPager
+            Spacer(modifier = Modifier.height(16.dp))
+            // You might want to show details below the cards in this mode if the user scrolls
+            val selectedCard by viewModel.selectedCardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
+            selectedCard?.let {
+                CardDetails(card = it, modifier = Modifier.fillMaxWidth()) // Details below the pager
+            }
+        }
     }
 }
 
 @Composable
 fun Title(viewModel: OverviewViewModel) {
     Column(horizontalAlignment = Alignment.Start) {
-        GalleryAndTitle(
-            viewModel = viewModel
-        )
+        // Title itself doesn't need much change, it just hosts the gallery.
+        GalleryAndTitle(viewModel = viewModel)
     }
 }
 
 @Composable
-GalleryAndTitle(viewModel: OverviewViewModel) {
-    val cardState = viewModel.cardState.collectAsState()
+fun GalleryAndTitle(viewModel: OverviewViewModel, modifier: Modifier = Modifier) {
+    val cardState by viewModel.cardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
+    val selectedCardState by viewModel.selectedCardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
+    val standardCardState by viewModel.standardCardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
+
+
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally) {
-            val pagerState = rememberPagerState(pageCount = cardState.value.size)
-            LaunchedEffect(key1 = cardState) {
-                with(cardState.indexOf(selectedCardState)) {
-                    when {
-                        this == -1 -> pagerState.scrollToPage(0)
-                        this != pagerState.currentPage -> pagerState.scrollToPage(this)
+        modifier = modifier, // Apply the passed modifier for layout weighting
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val pagerState = rememberPagerState(pageCount = { cardState.size })
+        LaunchedEffect(key1 = cardState, selectedCardState) {
+            val index = cardState.indexOf(selectedCardState)
+            if (index != -1 && index != pagerState.currentPage) {
+                pagerState.animateScrollToPage(index)
+            }
+        }
+
+        // Dynamically determine pager padding based on screen width to maintain proportion
+        val pagerPadding = calculateHorizontalPagerPadding()
+
+        if (pagerState.pageCount > 0) {
+            HorizontalPager(
+                contentPadding = pagerPadding,
+                pageSpacing = 16.dp,
+                modifier = Modifier.fillMaxWidth(),
+                state = pagerState,
+                pageContent = { index ->
+                    Column {
+                        val card = cardState[index]
+                        StandardCardLabel(
+                            modifier = Modifier
+                                .align(Alignment.Start)
+                                .height(22.dp)
+                                .padding(horizontal = pagerPadding.calculateLeftPadding(LayoutDirection.Ltr)),
+                            card = card,
+                            cardId = standardCardState
+                        )
+                        CardComponent(card)
                     }
                 }
-            }
-            val pagerPadding = determinePagerPadding(pageCount = pagerState.pageCount, currentPage = pagerState.currentPage)
-            if (pagerState.pageCount > 0) {
-                HorizontalPager(
-                    contentPadding = pagerPadding,
-                    pageSpacing = 16.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                    state = pagerState,
-                    pageContent = { index ->
-                        Column {
-                            val card = cardState.value[index]
-                            StandardCardLabel(
-                                modifier = Modifier
-                                    .align(Alignment.Start)
-                                    .height(22.dp)
-                                    .padding(horizontal = pagerPadding.calculateLeftPadding(LayoutDirection.Ltr)),
-                                card = cardState[index],
-                                cardId = standardCardState
-                            )
-                            CardComponent(cardState[index])
-                        }
-                    }
+            )
+            OptionalCardName(cards = cardState, currentPage = pagerState.currentPage)
+            if (pagerState.pageCount > 1) {
+                Carousel(
+                    pagerState = pagerState,
+                    endless = false,
                 )
-                OptionalCardName(cards = cardState, currentPage = pagerState.currentPage)
-                if (pagerState.pageCount > 1) {
-                    Carousel(
-                        pagerState = pagerState,
-                        endless = false,
-                    )
-                }
-                if (cardState.size > pagerState.currentPage) {
-                    viewModel.selectedCardState.value = cardState.value[pagerState.currentPage]
-                }
-            } else {
-                Text("No cards available", style = MaterialTheme.typography.body1, fontSize = 16.sp)
             }
+            LaunchedEffect(pagerState.currentPage) {
+                if (cardState.size > pagerState.currentPage) {
+                    viewModel.selectedCardState.value = cardState[pagerState.currentPage]
+                }
+            }
+        } else {
+            Text("No cards available", style = MaterialTheme.typography.body1, fontSize = 16.sp)
+        }
     }
 }
 
@@ -175,10 +272,31 @@ fun OptionalCardName(cards: List<Card>, currentPage: Int) {
 fun StandardCardLabel(modifier: Modifier, card: Card, cardId: String?) {
     cardId?.let { id ->
         Column(modifier = modifier) {
-            if (id == card.cardId) {
+            if (id == card.id) {
                 Text(
                     text = "Standard Card"
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun CardComponent(card: Card) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1.586f), // Keep the aspect ratio for consistent card shape
+        shape = RoundedCornerShape(8.dp),
+        elevation = 1.5.dp
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            RemoteImageCard(imageUrl = card.imageUrl)
+            CardContent(card)
+            if (card.state == CardState.DISABLED) {
+                CardDisabledOverlay()
             }
         }
     }
@@ -189,15 +307,16 @@ fun CardContent(card: Card) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .paddingFromBaseline(bottom = 24.dp)
-            .padding(start = 24.dp),
-        horizontalAlignment = Alignment.Start
+            .padding(start = 24.dp, bottom = 24.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Bottom
     ) {
         Text(
             text = card.ownerName,
             style = MaterialTheme.typography.h6,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.height(4.dp))
         if (card.type == CardType.STANDARD) {
@@ -225,56 +344,20 @@ fun CardContent(card: Card) {
 }
 
 @Composable
-fun CardComponent(card: Card) {
-    Card(
-        modifier = Modifier
-        .fillMaxWidth()
-        .aspectRatio(1.586f),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            RemoteImageCard(imageUrl = card.imageUrl)
-            CardContent(card)
-            if (card.state == CardState.DISABLED) {
-                CardDisabledOverlay()
-            }
-        }
-    }
-}
-
-@Composable
-@ReadOnlyComposable
-fun setSingletonImageLoaderFactory(factory: (context: PlatformContext) -> ImageLoader) {
-    SingletonImageLoader.setSafe(factory)
-}
-
-@Composable
 fun RemoteImageCard(imageUrl: String) {
-    val defaultPainter = DefaultPainter()
-    setSingletonImageLoaderFactory { getAsyncImagePainter(it) }
+    val defaultPainter = remember { ColoredRectanglePainter(Color.LightGray) }
+    val imageLoader = remember { getAsyncImagePainter(LocalContext.current) }
     AsyncImage(
-        model = imageUrl,
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(imageUrl)
+            .crossfade(true)
+            .build(),
         modifier = Modifier.fillMaxSize(),
-        contentDescription = "Image",
+        contentDescription = "Card Image",
+        imageLoader = imageLoader,
         placeholder = defaultPainter,
         error = defaultPainter,
     )
-}
-
-@Composable
-fun DefaultPainter() {
-    val painter = remember { ColoredRectanglePainter(Color.Grey) }
-
-    Canvas(
-        modifier = Modifier
-            .size(300.dp, 200.dp)
-    ) {
-        with(painter) {
-            draw(size)
-        }
-    }
 }
 
 @Composable
@@ -288,7 +371,7 @@ fun CardDisabledOverlay() {
         Box(
             modifier = Modifier
                 .size(100.dp)
-                .background(Color.Black.copy(alpha = 0.7f)),
+                .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -299,4 +382,90 @@ fun CardDisabledOverlay() {
             )
         }
     }
+}
+
+/**
+ * Calculates the horizontal padding for the HorizontalPager to keep the card's
+ * width proportional to the screen width.
+ */
+@Composable
+private fun calculateHorizontalPagerPadding(): PaddingValues {
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    // Define a target proportion for the card's width relative to the screen width.
+    // E.g., 0.8f means the card will take 80% of the screen width.
+    val cardWidthProportion = 0.85f // Adjust this value to your desired card size
+    val cardTargetWidth = screenWidth * cardWidthProportion
+    val horizontalPadding = (screenWidth - cardTargetWidth) / 2
+
+    return PaddingValues(horizontal = horizontalPadding)
+}
+
+
+@Composable
+fun Carousel(pagerState: androidx.compose.foundation.pager.PagerState, endless: Boolean) {
+    // Placeholder for your Carousel implementation.
+    Text("Carousel (Page ${pagerState.currentPage + 1} of ${pagerState.pageCount})")
+}
+
+@Composable
+fun CardDetails(card: Card, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = card.customName ?: "Card Details",
+            style = MaterialTheme.typography.h5,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            text = "Owner: ${card.ownerName}",
+            style = MaterialTheme.typography.body1,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Text(
+            text = "Card Number: ${card.number}",
+            style = MaterialTheme.typography.body1,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        card.iban?.let {
+            Text(
+                text = "IBAN: $it",
+                style = MaterialTheme.typography.body1,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+        Text(
+            text = "Type: ${card.type.name.lowercase().capitalize()}",
+            style = MaterialTheme.typography.body1,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Text(
+            text = "Status: ${card.state.name.lowercase().capitalize()}",
+            style = MaterialTheme.typography.body1,
+            color = if (card.state == CardState.ACTIVE) Color.Green else Color.Red
+        )
+    }
+}
+
+
+@Preview(showBackground = true, widthDp = 360, heightDp = 640) // Standard phone portrait
+@Composable
+fun OverviewComponentPortraitPreview() {
+    OverviewComponent()
+}
+
+@Preview(showBackground = true, widthDp = 640, heightDp = 360) // Standard phone landscape (limited height)
+@Composable
+fun OverviewComponentLandscapeLimitedHeightPreview() {
+    OverviewComponent()
+}
+
+@Preview(showBackground = true, widthDp = 800, heightDp = 600) // Tablet landscape (enough height)
+@Composable
+fun OverviewComponentTabletLandscapePreview() {
+    OverviewComponent()
 }
