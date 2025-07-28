@@ -23,3 +23,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "jetpackcompose-stuff"
+include(":lib")

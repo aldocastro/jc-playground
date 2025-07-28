@@ -1,95 +1,64 @@
 package com.example.overview
 
-import androidx.compose.foundation.Canvas
+import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.remember
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.runtime.StateFlow
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.foundation.layout.calculateLeftPadding
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.*
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Card
-import androidx.compose.material.CardDefaults
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.text.capitalize
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.Locale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
-import coil.request.ImageRequest
-import coil.ImageLoader
-import coil.compose.AsyncImage
-import coil.compose.rememberImagePainter
-import coil.request.ImageResult
-import coil.compose.rememberAsyncImagePainter
-import coil.compose.AsyncImagePainter
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import android.graphics.Paint
-import android.graphics.Rect
-import android.graphics.Typeface
-import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.drawscope.ContentDrawScope
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import android.graphics.Rect
-import androidx.compose.ui.graphics.Canvas
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.graphicsLayer
-import coil.SingletonImageLoader
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.request.CachePolicy
-import coil.request.Disposable
-import coil.request.ErrorResult
-import coil.request.SuccessResult
-import coil.size.Size
-import coil.size.px2dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import coil3.ImageLoader
+import coil3.compose.AsyncImage
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import androidx.compose.ui.geometry.Size as ComposeSize
 
 enum class CardState {
@@ -101,15 +70,17 @@ enum class CardType {
 
 data class Card(val id: String, val ownerName: String, val customName: String?, val number: String, val iban: String?, val state: CardState, val type: CardType, val imageUrl: String)
 
+private val defaultPaddingValues = PaddingValues(start = 0.dp, top = 24.dp, end = 0.dp, bottom = 24.dp)
+
 class OverviewViewModel: ViewModel() {
     private val cards = listOf(
         Card("1", "Owen Smith", "Personal Card", "1234 5678 9012 3456", "DE89370400440532013000", CardState.ACTIVE, CardType.STANDARD, "https://www.dummyimage.com/300x200/0011ff/fafafa.jpg&text=standard"),
         Card("2", "Owen Smith", null, "2345 6789 0123 4567", "DE89370400440532013001", CardState.DISABLED, CardType.STANDARD, "https://www.dummyimage.com/300x200/0011ff/fafafa.jpg&text=standard"),
         Card("3", "Owen Smith", "Premium Card", "3456 7890 1234 5678", null, CardState.ACTIVE, CardType.PREMIUM, "https://www.dummyimage.com/300x200/0011ff/fafafa.jpg&text=premium"),
     )
-    val cardState = StateFlow<List<Card>>(initialValue = cards)
-    val selectedCardState = StateFlow<Card?>(initialValue = cards.firstOrNull())
-    val standardCardState = StateFlow<String?>(initialValue = cards.firstOrNull()?.id)
+    val cardState = MutableStateFlow<List<Card>>(cards).asStateFlow()
+    val selectedCardState = MutableStateFlow<Card?>(cards.firstOrNull())
+    val standardCardState = MutableStateFlow<String?>(cards.firstOrNull()?.id).asStateFlow()
 
 }
 
@@ -127,7 +98,7 @@ private class ColoredRectanglePainter(private val color: Color) : Painter() {
 
 // Function to get a singleton ImageLoader for Coil, can be customized if needed
 @Composable
-private fun getAsyncImagePainter(context: android.content.Context): ImageLoader {
+private fun getAsyncImagePainter(context: Context = LocalContext.current): ImageLoader {
     return remember(context) {
         ImageLoader.Builder(context)
             .diskCachePolicy(CachePolicy.ENABLED)
@@ -138,23 +109,19 @@ private fun getAsyncImagePainter(context: android.content.Context): ImageLoader 
 
 
 @Composable
-fun OverviewComponent(viewModel: OverviewViewModel = viewModel()) {
-    // We explicitly want a single-column layout, always vertically scrollable if content overflows.
+fun OverviewComponent(innerPadding: PaddingValues = defaultPaddingValues, viewModel: OverviewViewModel = OverviewViewModel()) {
     Column(
         modifier = Modifier
-            .padding(top = 24.dp)
+            .padding(innerPadding)
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()) // Always enable vertical scrolling
+            .verticalScroll(rememberScrollState())
     ) {
-        // The title and card pager
         Title(viewModel)
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Card details always appear below the pager, regardless of orientation or screen height
-        val selectedCard by viewModel.selectedCardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
-        selectedCard?.let {
-            CardDetails(card = it, modifier = Modifier.fillMaxWidth())
-        }
+//        val selectedCard by viewModel.selectedCardState.collectAsState()
+//        selectedCard?.let {
+//            CardDetails(card = it, modifier = Modifier.fillMaxWidth())
+//        }
     }
 }
 
@@ -167,16 +134,15 @@ fun Title(viewModel: OverviewViewModel) {
 
 @Composable
 fun GalleryAndTitle(viewModel: OverviewViewModel, modifier: Modifier = Modifier) {
-    val cardState by viewModel.cardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
-    val selectedCardState by viewModel.selectedCardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
-    val standardCardState by viewModel.standardCardState.collectAsStateWithLifecycle(LocalLifecycleOwner.current.lifecycle)
-
+    val cardState by viewModel.cardState.collectAsState()
+    val selectedCardState by viewModel.selectedCardState.collectAsState()
+    val standardCardState by viewModel.standardCardState.collectAsState()
 
     Column(
-        modifier = modifier.fillMaxWidth(), // Ensure the column fills width, allowing padding calculations
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val pagerState = rememberPagerState(pageCount = { cardState.size })
+        val pagerState = rememberPagerState(pageCount = cardState::size)
         LaunchedEffect(key1 = cardState, selectedCardState) {
             val index = cardState.indexOf(selectedCardState)
             if (index != -1 && index != pagerState.currentPage) {
@@ -210,10 +176,7 @@ fun GalleryAndTitle(viewModel: OverviewViewModel, modifier: Modifier = Modifier)
             )
             OptionalCardName(cards = cardState, currentPage = pagerState.currentPage)
             if (pagerState.pageCount > 1) {
-                Carousel(
-                    pagerState = pagerState,
-                    endless = false,
-                )
+                Carousel(pagerState = pagerState)
             }
             LaunchedEffect(pagerState.currentPage) {
                 if (cardState.size > pagerState.currentPage) {
@@ -221,18 +184,18 @@ fun GalleryAndTitle(viewModel: OverviewViewModel, modifier: Modifier = Modifier)
                 }
             }
         } else {
-            Text("No cards available", style = MaterialTheme.typography.body1, fontSize = 16.sp)
+            Text("No cards available", style = MaterialTheme.typography.bodySmall, fontSize = 16.sp)
         }
     }
 }
 
 @Composable
 fun OptionalCardName(cards: List<Card>, currentPage: Int) {
-    if (cards.any { it.customName.isNullOrEmpty() }) {
+    if (cards.any { !it.customName.isNullOrEmpty() }) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = cards[currentPage].customName ?: "No custom name",
-            style = MaterialTheme.typography.body1,
+            style = MaterialTheme.typography.bodySmall,
             fontSize = 14.sp,
             textAlign = TextAlign.Left,
         )
@@ -255,15 +218,23 @@ fun StandardCardLabel(modifier: Modifier, card: Card, cardId: String?) {
 
 @Composable
 fun CardComponent(card: Card) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val cardMaxHeight = if (isLandscape) configuration.screenHeightDp.dp * 0.8f else Dp.Unspecified
+    val aspectRatio = 1.586f
     Card(
         modifier = Modifier
             .fillMaxWidth() // Card itself fills the width provided by HorizontalPager's contentPadding
-            .aspectRatio(1.586f), // Keep the aspect ratio for consistent card shape
+            .heightIn(max = cardMaxHeight)
+            .aspectRatio(aspectRatio), // Keep the aspect ratio for consistent card shape
         shape = RoundedCornerShape(8.dp),
-        elevation = 1.5.dp
+        elevation = CardDefaults.cardElevation(1.5.dp)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .heightIn(max = cardMaxHeight)
+                .aspectRatio(aspectRatio)
         ) {
             RemoteImageCard(imageUrl = card.imageUrl)
             CardContent(card)
@@ -285,7 +256,7 @@ fun CardContent(card: Card) {
     ) {
         Text(
             text = card.ownerName,
-            style = MaterialTheme.typography.h6,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -294,7 +265,7 @@ fun CardContent(card: Card) {
         if (card.type == CardType.STANDARD) {
             Text(
                 text = "Card Number: ${card.number}",
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.bodySmall,
                 fontSize = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -302,12 +273,12 @@ fun CardContent(card: Card) {
         } else {
             Text(
                 text = "Iban: ${card.iban ?: "N/A"}",
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.bodySmall,
                 fontSize = 14.sp,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = "PREMIUM DEBIT",
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.bodySmall,
                 fontSize = 14.sp,
                 fontStyle = FontStyle.Italic
             )
@@ -318,7 +289,6 @@ fun CardContent(card: Card) {
 @Composable
 fun RemoteImageCard(imageUrl: String) {
     val defaultPainter = remember { ColoredRectanglePainter(Color.LightGray) }
-    val imageLoader = remember { getAsyncImagePainter(LocalContext.current) }
     AsyncImage(
         model = ImageRequest.Builder(LocalContext.current)
             .data(imageUrl)
@@ -326,7 +296,7 @@ fun RemoteImageCard(imageUrl: String) {
             .build(),
         modifier = Modifier.fillMaxSize(),
         contentDescription = "Card Image",
-        imageLoader = imageLoader,
+        imageLoader = getAsyncImagePainter(),
         placeholder = defaultPainter,
         error = defaultPainter,
     )
@@ -349,7 +319,7 @@ fun CardDisabledOverlay() {
             Text(
                 text = "Disabled",
                 color = Color.White,
-                style = MaterialTheme.typography.h6,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -374,9 +344,40 @@ private fun calculateHorizontalPagerPadding(): PaddingValues {
 
 
 @Composable
-fun Carousel(pagerState: androidx.compose.foundation.pager.PagerState, endless: Boolean) {
-    // Placeholder for your Carousel implementation.
-    Text("Carousel (Page ${pagerState.currentPage + 1} of ${pagerState.pageCount})")
+fun Carousel(pagerState: PagerState) {
+    DotsIndicator(
+        totalDots = pagerState.pageCount,
+        selectedIndex = pagerState.currentPage,
+        modifier = Modifier.padding(16.dp)
+    )
+}
+
+@Composable
+fun DotsIndicator(
+    totalDots: Int,
+    selectedIndex: Int,
+    modifier: Modifier = Modifier,
+    dotSize: Dp = 20.dp,
+    selectedDotSize: Dp = 30.dp,
+    dotSpacing: Dp = 14.dp,
+    selectedColor: Color = Color.Blue,
+    unSelectedColor: Color = Color.DarkGray
+) {
+    Row(
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+    ) {
+        repeat(totalDots) { index ->
+            Box(
+                modifier = Modifier
+                    .size(if (index == selectedIndex) selectedDotSize else dotSize)
+                    .padding(horizontal = dotSpacing / 2)
+                    .clip(CircleShape)
+                    .background(if (index == selectedIndex) selectedColor else unSelectedColor)
+            )
+        }
+    }
 }
 
 @Composable
@@ -389,35 +390,35 @@ fun CardDetails(card: Card, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = card.customName ?: "Card Details",
-            style = MaterialTheme.typography.h5,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
             text = "Owner: ${card.ownerName}",
-            style = MaterialTheme.typography.body1,
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(bottom = 4.dp)
         )
         Text(
             text = "Card Number: ${card.number}",
-            style = MaterialTheme.typography.body1,
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(bottom = 4.dp)
         )
         card.iban?.let {
             Text(
                 text = "IBAN: $it",
-                style = MaterialTheme.typography.body1,
+                style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
         }
         Text(
-            text = "Type: ${card.type.name.lowercase().capitalize()}",
-            style = MaterialTheme.typography.body1,
+            text = "Type: ${card.type.name.capitalize(Locale.current)}",
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(bottom = 4.dp)
         )
         Text(
-            text = "Status: ${card.state.name.lowercase().capitalize()}",
-            style = MaterialTheme.typography.body1,
+            text = "Status: ${card.state.name.capitalize(Locale.current)}",
+            style = MaterialTheme.typography.bodySmall,
             color = if (card.state == CardState.ACTIVE) Color.Green else Color.Red
         )
     }
