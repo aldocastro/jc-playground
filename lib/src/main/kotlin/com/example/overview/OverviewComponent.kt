@@ -1,11 +1,13 @@
 package com.example.overview
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,15 +21,13 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
-import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.painter.Painter
@@ -48,7 +49,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -57,6 +57,7 @@ import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.aldocastro.myfirstapp.rememberOrientationState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import androidx.compose.ui.geometry.Size as ComposeSize
@@ -131,6 +132,44 @@ fun Title(viewModel: OverviewViewModel) {
         GalleryAndTitle(viewModel = viewModel)
     }
 }
+data class CardDimensions(
+    val cardWidth: Dp,
+    val cardHeight: Dp,
+    val contentPadding: PaddingValues
+)
+
+@Composable
+fun rememberOrientationState(): Boolean {
+    val orientation = LocalConfiguration.current.orientation
+    return orientation == Configuration.ORIENTATION_LANDSCAPE
+}
+
+@Composable
+fun rememberCardDimensions(): CardDimensions {
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val cardWidth: Dp
+    val cardHeight: Dp
+    val horizontalPadding: Dp
+
+    if (isLandscape) {
+        cardWidth = screenWidth * 0.45f
+        cardHeight = cardWidth * (5f / 8f)
+        horizontalPadding = 24.dp
+    } else {
+        cardWidth = screenWidth * 0.90f
+        cardHeight = cardWidth * (10f / 16f)
+        horizontalPadding = (screenWidth - cardWidth) / 1.7f
+    }
+
+    return CardDimensions(
+        cardWidth = cardWidth,
+        cardHeight = cardHeight,
+        contentPadding = PaddingValues(horizontal = horizontalPadding)
+    )
+}
 
 @Composable
 fun GalleryAndTitle(viewModel: OverviewViewModel, modifier: Modifier = Modifier) {
@@ -138,53 +177,71 @@ fun GalleryAndTitle(viewModel: OverviewViewModel, modifier: Modifier = Modifier)
     val selectedCardState by viewModel.selectedCardState.collectAsState()
     val standardCardState by viewModel.standardCardState.collectAsState()
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        val pagerState = rememberPagerState(pageCount = cardState::size)
-        LaunchedEffect(key1 = cardState, selectedCardState) {
-            val index = cardState.indexOf(selectedCardState)
-            if (index != -1 && index != pagerState.currentPage) {
-                pagerState.animateScrollToPage(index)
-            }
+    val pagerState = rememberPagerState(pageCount = { cardState.size })
+    val cardDimensions = rememberCardDimensions()
+    val isLandscape = rememberOrientationState()
+
+    LaunchedEffect(cardState, selectedCardState) {
+        val index = cardState.indexOf(selectedCardState)
+        if (index != -1 && index != pagerState.currentPage) {
+            pagerState.animateScrollToPage(index)
         }
+    }
 
-        // Dynamically determine pager padding based on screen width to maintain proportion
-        val pagerPadding = calculateHorizontalPagerPadding()
-
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(top = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top
+    ) {
         if (pagerState.pageCount > 0) {
             HorizontalPager(
-                contentPadding = pagerPadding,
-                pageSpacing = 16.dp,
-                modifier = Modifier.fillMaxWidth(), // This modifier is crucial for padding calculation
                 state = pagerState,
-                pageContent = { index ->
-                    Column {
-                        val card = cardState[index]
-                        StandardCardLabel(
-                            modifier = Modifier
-                                .align(Alignment.Start)
-                                .height(22.dp)
-                                .padding(horizontal = pagerPadding.calculateLeftPadding(LayoutDirection.Ltr)),
-                            card = card,
-                            cardId = standardCardState
-                        )
-                        CardComponent(card)
-                    }
+                contentPadding = cardDimensions.contentPadding,
+                pageSpacing = 16.dp,
+                modifier = Modifier
+                    .width(cardDimensions.cardWidth)
+                    .height(cardDimensions.cardHeight)
+            ) { index ->
+                Column {
+                    val card = cardState[index]
+                    StandardCardLabel(
+                        modifier = Modifier
+                            .align(Alignment.Start)
+                            .height(22.dp)
+                            .padding(horizontal = 8.dp),
+                        card = card,
+                        cardId = standardCardState
+                    )
+                    CardComponent(card, isLandscape)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OptionalCardName(
+                cards = cardState,
+                currentPage = pagerState.currentPage
             )
-            OptionalCardName(cards = cardState, currentPage = pagerState.currentPage)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             if (pagerState.pageCount > 1) {
                 Carousel(pagerState = pagerState)
             }
+
             LaunchedEffect(pagerState.currentPage) {
                 if (cardState.size > pagerState.currentPage) {
                     viewModel.selectedCardState.value = cardState[pagerState.currentPage]
                 }
             }
         } else {
-            Text("No cards available", style = MaterialTheme.typography.bodySmall, fontSize = 16.sp)
+            Text(
+                "No cards available",
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 16.sp
+            )
         }
     }
 }
@@ -217,9 +274,8 @@ fun StandardCardLabel(modifier: Modifier, card: Card, cardId: String?) {
 }
 
 @Composable
-fun CardComponent(card: Card) {
+fun CardComponent(card: Card, isLandscape: Boolean) {
     val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val cardMaxHeight = if (isLandscape) configuration.screenHeightDp.dp * 0.8f else Dp.Unspecified
     val aspectRatio = 1.586f
     Card(
@@ -325,23 +381,6 @@ fun CardDisabledOverlay() {
         }
     }
 }
-
-/**
- * Calculates the horizontal padding for the HorizontalPager to keep the card's
- * width proportional to the screen width.
- */
-@Composable
-private fun calculateHorizontalPagerPadding(): PaddingValues {
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    // Define a target proportion for the card's width relative to the screen width.
-    // E.g., 0.85f means the card will take 85% of the screen width.
-    val cardWidthProportion = 0.85f // Adjust this value to your desired card size
-    val cardTargetWidth = screenWidth * cardWidthProportion
-    val horizontalPadding = (screenWidth - cardTargetWidth) / 2
-
-    return PaddingValues(horizontal = horizontalPadding)
-}
-
 
 @Composable
 fun Carousel(pagerState: PagerState) {
